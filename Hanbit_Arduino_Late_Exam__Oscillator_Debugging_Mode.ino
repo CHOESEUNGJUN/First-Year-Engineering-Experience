@@ -49,7 +49,7 @@
  * - 불필요한 데이터 제거로 타이밍 밀림 방지
  *
  * [하드웨어]
- * - Arduino Mega 2560 / Mega ADK
+ * - Arduino Mega 2560 /*mega ADK는 업로드문제로 작동X
  * - LED 8개 (핀 36)
  * - RGB LED (핀 4, 5, 6)
  * - FND 7-Segment (핀 38, 32)
@@ -957,3 +957,4 @@ void loop()
   main_interval_count = 0;                // 카운터 리셋
   pin_loop = !pin_loop;                   // 디버그 핀 토글
 }
+
