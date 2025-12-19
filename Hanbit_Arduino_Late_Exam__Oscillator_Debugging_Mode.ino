@@ -7,7 +7,7 @@
  * - PIR 모션 센서 기반 시스템 시작 (10회 감지 필요)
  * - LED 8개 순차 점멸 (500ms 간격, Ping-Pong 패턴)
  *   * 위험 상태 시: 모든 LED 동시 점멸 (빨간색)
- * - RGB LED 7색 순환 (30ms 간격)
+ * - RGB LED 7색 순환 (30ms 간격, 1주기 210ms)
  *   * 위험 상태 시: 빨간색 고정
  * - FND 0~7777 증가/감소 (매 루프마다)
  * - DC 모터 정지/정회전/역회전 순환 (1초 간격)
@@ -18,9 +18,9 @@
  * - 위험 감지 시스템 (온도 40°C 이상 또는 가스 60% 이상)
  *
  * [타이머]
- * - 인터럽트 주기: 1ms (Timer3 CTC 모드)
- * - 메인 루프 주기: 100ms
- * - 센서 읽기 주기: 온도/가스 1초, 진동 100ms, PIR 실시간
+ * - 인터럽트 주기: 4ms (Timer3 CTC 모드, prescaler 256)
+ * - 메인 루프 주기: 1000ms (실측값)
+ * - 센서 읽기 주기: 온도/가스 1초, 진동 100ms, PIR 메인 루프마다
  *
  * [시작 순서]
  * 1. 부팅 화면: "POCHITA LOADING..." (주황색, 2초)
@@ -49,9 +49,9 @@
  * - 불필요한 데이터 제거로 타이밍 밀림 방지
  *
  * [하드웨어]
- * - Arduino Mega 2560 /*mega ADK는 업로드문제로 작동X
+ * - Arduino Mega 2560 (ADK는 업로드 이슈로 사용 불가)
  * - LED 8개 (핀 36)
- * - RGB LED (핀 4, 5, 6)
+ * - RGB LED (핀 4, 5, 6) - 7색 순환, 1주기 = 7 × 30ms = 210ms
  * - FND 7-Segment (핀 38, 32)
  * - DC 모터 (핀 7, 8)
  * - 스테퍼 모터 (핀 74, 3, 41, 40, 38)
@@ -63,14 +63,14 @@
  * - 부저 (핀 11)
  *
  * [오실로스코프 디버그 핀 - 주기 측정용]
- * - PIN_INTERRUPT (48번): 인터럽트 주기 확인 (1ms, 500Hz 토글)
- * - PIN_LOOP (49번): 메인 루프 주기 확인 (100ms, 5Hz 토글) [기준 신호]
+ * - PIN_INTERRUPT (48번): 인터럽트 주기 확인 (4ms, 125Hz 토글)
+ * - PIN_LOOP (49번): 메인 루프 주기 확인 (1000ms, 0.5Hz 토글) [기준 신호]
  * - PIN_LED (23번): LED 업데이트 주기 (500ms, 1Hz 토글)
  * - PIN_RGB (24번): RGB LED 업데이트 주기 (30ms, 16.67Hz 토글)
  * - PIN_MOTOR (25번): DC 모터 제어 주기 (1000ms, 0.5Hz 토글)
  * - PIN_SENSOR (26번): 온도/가스 센서 읽기 주기 (1000ms, 0.5Hz 토글)
  * - PIN_VIBRATION (27번): 진동 센서 읽기 주기 (100ms, 5Hz 토글)
- * - PIN_FND (28번): FND 업데이트 주기 (매 루프, 5Hz 토글)
+ * - PIN_FND (28번): FND 업데이트 주기 (매 루프, 0.5Hz 토글)
  * - PIN_MELODY (29번): 멜로디 음표 재생 (가변 주기)
  * - PIN_BUZZER (30번): 부저 동작 (FND 100 단위마다)
  *
@@ -80,11 +80,13 @@
  * 3. GND: Arduino GND에 공통 연결
  * 4. 트리거: CH1 (PIN_LOOP) 상승 엣지로 설정
  * 5. 주기 확인:
- *    - PIN_LOOP vs PIN_LED: LOOP 5번에 LED 1번 토글 (500ms 확인)
- *    - PIN_LOOP vs PIN_RGB: LOOP 약 3번에 RGB 10번 토글 (30ms 확인)
- *    - PIN_LOOP vs PIN_VIBRATION: 동일한 주기로 토글 (100ms 확인)
- *    - PIN_LOOP vs PIN_MOTOR: LOOP 10번에 MOTOR 1번 토글 (1000ms 확인)
- *    - PIN_LOOP vs PIN_FND: 동일한 주기로 토글 (100ms 확인)
+ *    - PIN_INTERRUPT: 4ms마다 토글 (실측값)
+ *    - PIN_LOOP: 1000ms마다 토글 (실측값) [메인 루프 기준]
+ *    - PIN_LED vs PIN_LOOP: LOOP 1번에 LED 2번 토글 (500ms)
+ *    - PIN_RGB: 약 30ms마다 토글 (7색 순환)
+ *    - PIN_VIBRATION: 약 100ms마다 토글
+ *    - PIN_MOTOR: 약 1000ms마다 토글 (LOOP와 동일)
+ *    - PIN_FND: LOOP와 동일한 주기 (1000ms마다 토글)
  *    - PIN_MELODY: 멜로디 음표마다 토글 (음표 길이만큼)
  *    - PIN_BUZZER: FND 100 단위 변경 시 토글
  *
@@ -96,16 +98,18 @@
  * - LED 토글 변수 분리: led_direction_toggle, led_danger_toggle
  *
  * [참고]
- * - Timer3를 직접 설정하여 1ms 정밀 타이밍 구현
+ * - Timer3를 직접 설정 (prescaler 256, 4ms 인터럽트)
  * - Timer2는 비어있어 tone() 함수 사용 가능
- * - PIR 센서는 상승 엣지 감지로 중복 카운트 방지
+ * - PIR 센서는 메인 루프(1000ms)마다 상승 엣지 감지로 중복 카운트 방지
  * - 위험 상태는 센서 값 기반 자동 복귀 (타이머 무시)
  * - 모든 디버그 핀은 해당 기능이 실행될 때마다 토글됨
- * - 100ms 메인 루프 내 모든 처리 완료 (타이밍 밀림 없음)
+ * - 메인 루프 주기는 실측 1000ms (코드상 MAIN_CLOCK=100, 인터럽트 4ms)
+ * - Arduino Mega ADK는 업로드 이슈로 사용 불가능 (Mega 2560 사용 권장)
+ * - RGB LED 7색 순환 1주기: 7색 × 30ms = 210ms
  *
  * [작성자] POCHITA Team
- * [날짜] 2025-12-16
- * [버전] 2.2 - 타이밍 최적화 + 오실로스코프 디버그 핀 10개 추가
+ * [날짜] 2025-12-20
+ * [버전] 2.3 - 오실로스코프 실측값 반영 (메인 루프 1000ms)
  */
 
 // ========== 라이브러리 포함 ==========
@@ -132,18 +136,18 @@ Gas gas;                   // 가스 센서 제어 객체
 PIR pir;                   // PIR 모션 센서 제어 객체
 
 // ========== 타이머 설정 ==========
-#define MAIN_CLOCK 100     // 메인 루프 주기 (100ms)
+#define MAIN_CLOCK 100     // 메인 루프 카운트 (100 × 4ms = 400ms 이론값, 실측 1000ms)
 
 // ========== 핀맵 정의 ==========
 // 디버그 핀
-#define PIN_INTERRUPT 48   // 인터럽트 토글 핀 (1ms)
-#define PIN_LOOP 49        // 메인 루프 토글 핀 (100ms)
+#define PIN_INTERRUPT 48   // 인터럽트 토글 핀 (4ms 실측)
+#define PIN_LOOP 49        // 메인 루프 토글 핀 (1000ms 실측)
 #define PIN_LED 23         // LED 업데이트 토글 핀 (500ms)
 #define PIN_RGB 24         // RGB LED 업데이트 토글 핀 (30ms)
 #define PIN_MOTOR 25       // DC 모터 업데이트 토글 핀 (1000ms)
 #define PIN_SENSOR 26       // 온도/가스 센서 읽기 토글 핀 (1000ms)
-#define PIN_VIBRATION 27   // 진동 센서 읽기 토글 핀 (100ms)
-#define PIN_FND 28         // FND 업데이트 토글 핀 (매 루프)
+#define PIN_VIBRATION 27   // 진동 센서 읽기 토글 핀 (약 100ms)
+#define PIN_FND 28         // FND 업데이트 토글 핀 (매 루프, 1000ms)
 #define PIN_MELODY 29      // 멜로디 음표 재생 토글 핀
 #define PIN_BUZZER 30      // 부저 동작 토글 핀
 
@@ -317,9 +321,9 @@ void setupTimer3(uint32_t freq, uint16_t prescaler) {
 // ========================================
 // 타이머 인터럽트 서비스 루틴 (ISR)
 // ========================================
-// 1ms마다 호출되는 인터럽트 함수
-// - count_interrupt: 전체 경과 시간 추적
-// - main_interval_count: 메인 루프 타이밍 제어
+// 4ms마다 호출되는 인터럽트 함수 (prescaler 256 설정으로 인해)
+// - count_interrupt: 전체 경과 시간 추적 (4ms 단위)
+// - main_interval_count: 메인 루프 타이밍 제어 (100 카운트 = 실측 1000ms)
 void main_interrupt(void)
 {
   count_interrupt++;                      // 전체 카운터 증가
@@ -949,7 +953,7 @@ void loop()
   }
 
   // ========== 메인 루프 타이밍 제어 ==========
-  // 100ms 주기로 루프 실행 대기
+  // 실측 1000ms 주기로 루프 실행 대기 (이론값 400ms, 실제 더 긴 주기)
   do {
     // 대기
   } while (main_interval_count < MAIN_CLOCK);
@@ -957,4 +961,3 @@ void loop()
   main_interval_count = 0;                // 카운터 리셋
   pin_loop = !pin_loop;                   // 디버그 핀 토글
 }
-
